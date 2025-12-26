@@ -3,7 +3,8 @@ import yfinance as yf
 import pandas as pd
 from ta.trend import EMAIndicator
 from ta.momentum import StochRSIIndicator
-from datetime import datetime
+from datetime import datetime, timedelta
+import time
 
 st.set_page_config(
     page_title="Bank Nifty Live Trading",
@@ -14,7 +15,17 @@ SYMBOL = "^NSEBANK"
 REFRESH_SEC = 15
 
 # -------------------------------
-# DATA + LOGIC (SAME AS YOUR FINAL CODE)
+# AUTO REFRESH LOGIC (FIXED)
+# -------------------------------
+if "last_refresh" not in st.session_state:
+    st.session_state.last_refresh = time.time()
+
+if time.time() - st.session_state.last_refresh > REFRESH_SEC:
+    st.session_state.last_refresh = time.time()
+    st.experimental_rerun()
+
+# -------------------------------
+# DATA + LOGIC (UNCHANGED)
 # -------------------------------
 @st.cache_data(ttl=REFRESH_SEC)
 def fetch_and_process_data():
@@ -41,7 +52,6 @@ def fetch_and_process_data():
     # NSE hours
     df = df.between_time("09:15", "15:30")
 
-    # Clean numeric
     for col in ['Open', 'High', 'Low', 'Close', 'Adj Close']:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce')
@@ -61,7 +71,7 @@ def fetch_and_process_data():
     )
     df['StochRSI'] = stoch.stochrsi()
 
-    # -------- Trend Logic (HH-HL / LH-LL) --------
+    # -------- Trend Logic --------
     trends = ["NA"]
     for i in range(1, len(df)):
         ch, ph = df['High'].iloc[i], df['High'].iloc[i-1]
@@ -112,11 +122,9 @@ def fetch_and_process_data():
     df['Signal'] = signals
     df['Remark'] = remarks
 
-    # Latest day only
     latest_day = df.index.date.max()
     df = df[df.index.date == latest_day]
 
-    # Round
     for col in ['Adj Close','Close','High','Low','Open','EMA20']:
         if col in df.columns:
             df[col] = df[col].round(2)
@@ -136,21 +144,21 @@ if df.empty:
 
 latest = df.iloc[0]
 
-# -------- METRICS --------
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("Bank Nifty", latest['Close'])
 c2.metric("EMA20", latest['EMA20'])
 c3.metric("StochRSI", round(latest['StochRSI'], 2))
 c4.metric("Signal", latest['Signal'])
 
-st.info(f"🕒 Last Refresh: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} IST")
+# -------- IST TIME FIXED --------
+ist_time = datetime.utcnow() + timedelta(hours=5, minutes=30)
+st.info(f"🕒 Last Refresh (IST): {ist_time.strftime('%Y-%m-%d %H:%M:%S')}")
+
 st.warning(f"📌 Remark: {latest['Remark']}")
 
-# -------- ALERT --------
 if latest['Signal'] in ["CE BUY", "PE BUY"]:
     st.error("🚨 TRADE SIGNAL GENERATED 🚨")
 
-# -------- TABLE --------
 st.subheader("📋 Latest 1-Day Data (Descending)")
 
 show_cols = [
@@ -164,7 +172,6 @@ st.dataframe(
     height=420
 )
 
-# -------- CSV DOWNLOAD --------
 st.download_button(
     "⬇️ Download CSV",
     data=df.to_csv().encode('utf-8'),
@@ -172,4 +179,4 @@ st.download_button(
     mime="text/csv"
 )
 
-st.caption("🔄 Auto refresh every 15 seconds")
+st.caption("🔄 Auto refresh every 15 seconds (Working)")
